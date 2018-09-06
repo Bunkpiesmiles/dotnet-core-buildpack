@@ -36,13 +36,18 @@ type DotnetRuntime interface {
 	Install(string) error
 }
 
+type DotnetAspNetCore interface {
+	Install(string) error
+}
+
 type Finalizer struct {
-	Stager        Stager
-	Log           *libbuildpack.Logger
-	Command       Command
-	DotnetRuntime DotnetRuntime
-	Config        *config.Config
-	Project       *project.Project
+	Stager           Stager
+	Log              *libbuildpack.Logger
+	Command          Command
+	DotnetRuntime    DotnetRuntime
+	DotnetAspNetCore DotnetAspNetCore
+	Config           *config.Config
+	Project          *project.Project
 }
 
 func Run(f *Finalizer) error {
@@ -59,6 +64,11 @@ func Run(f *Finalizer) error {
 	}
 	if err := f.DotnetRuntime.Install(mainPath); err != nil {
 		f.Log.Error("Unable to install required dotnet runtimes: %s", err.Error())
+		return err
+	}
+
+	if err := f.DotnetAspNetCore.Install(mainPath); err != nil {
+		f.Log.Error("Unable to install required dotnet aspnetcore: %s", err.Error())
 		return err
 	}
 

@@ -46,7 +46,7 @@ var _ = Describe("Dotnetruntime", func() {
 		Expect(ioutil.WriteFile(filepath.Join(buildDir, "manifest.yml"), []byte("---"), 0644)).To(Succeed())
 		manifest, err = libbuildpack.NewManifest(buildDir, logger, time.Now())
 		Expect(err).To(BeNil())
-		Expect(ioutil.WriteFile(filepath.Join(buildDir, "foo.csproj"), []byte("---"), 0644)).To(Succeed())
+		Expect(ioutil.WriteFile(filepath.Join(buildDir, "foo.csproj"), []byte(""), 0644)).To(Succeed())
 
 		subject = dotnetruntime.New(depDir, buildDir, mockInstaller, mockManifest, logger)
 	})
@@ -65,7 +65,7 @@ var _ = Describe("Dotnetruntime", func() {
 			})
 
 			Context("when required version is discovered via .runtimeconfig.json", func() {
-				Context("Versions required == [4.5.6]", func() {
+				Context("Versions required == [4.5.6], which is already installed", func() {
 					BeforeEach(func() {
 						Expect(ioutil.WriteFile(filepath.Join(buildDir, "foo.runtimeconfig.json"),
 							[]byte(`{ "runtimeOptions": { "framework": { "name": "Microsoft.NETCore.App", "version": "4.5.6" }, "applyPatches": false } }`), 0644)).To(Succeed())
@@ -85,6 +85,35 @@ var _ = Describe("Dotnetruntime", func() {
 
 					It("installs the additional runtime", func() {
 						mockInstaller.EXPECT().InstallDependency(libbuildpack.Dependency{Name: "dotnet-runtime", Version: "7.8.9"}, filepath.Join(depDir, "dotnet-sdk"))
+						Expect(subject.Install(filepath.Join(buildDir, "foo.csproj"))).To(Succeed())
+					})
+				})
+			})
+
+			Context("when required version is discovered via proj file and patch is not floated", func() {
+				Context("Versions required == [6.7.8]", func() {
+					BeforeEach(func() {
+						Expect(ioutil.WriteFile(filepath.Join(buildDir, "foo.csproj"),
+							[]byte(`<RuntimeFrameworkVersion>6.7.8</RuntimeFrameworkVersion>`), 0644)).To(Succeed())
+					})
+
+					It("installs the additional runtime", func() {
+						mockInstaller.EXPECT().InstallDependency(libbuildpack.Dependency{Name: "dotnet-runtime", Version: "6.7.8"}, filepath.Join(depDir, "dotnet-sdk"))
+						Expect(subject.Install(filepath.Join(buildDir, "foo.csproj"))).To(Succeed())
+					})
+				})
+			})
+
+			Context("when required version is discovered via proj file and patch is floated", func() {
+				Context("Versions required == [6.7.9]", func() {
+					BeforeEach(func() {
+						Expect(ioutil.WriteFile(filepath.Join(buildDir, "foo.csproj"),
+							[]byte(`<RuntimeFrameworkVersion>6.7.*</RuntimeFrameworkVersion>`), 0644)).To(Succeed())
+					})
+
+					It("installs the additional runtime", func() {
+						mockManifest.EXPECT().AllDependencyVersions("dotnet-runtime").Return([]string{"4.5.6","6.7.8","6.7.9","6.8.9"})
+						mockInstaller.EXPECT().InstallDependency(libbuildpack.Dependency{Name: "dotnet-runtime", Version: "6.7.9"}, filepath.Join(depDir, "dotnet-sdk"))
 						Expect(subject.Install(filepath.Join(buildDir, "foo.csproj"))).To(Succeed())
 					})
 				})

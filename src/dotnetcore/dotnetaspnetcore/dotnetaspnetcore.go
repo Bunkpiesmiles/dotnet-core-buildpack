@@ -1,4 +1,4 @@
-package dotnetruntime
+package dotnetaspnetcore
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ type Manifest interface {
 	AllDependencyVersions(string) []string
 }
 
-type DotnetRuntime struct {
+type DotnetAspNetCore struct {
 	depDir    string
 	installer Installer
 	manifest  Manifest
@@ -26,8 +26,8 @@ type DotnetRuntime struct {
 	buildDir  string
 }
 
-func New(depDir string, buildDir string, installer Installer, manifest Manifest, logger *libbuildpack.Logger) *DotnetRuntime {
-	return &DotnetRuntime{
+func New(depDir string, buildDir string, installer Installer, manifest Manifest, logger *libbuildpack.Logger) *DotnetAspNetCore {
+	return &DotnetAspNetCore{
 		depDir:    depDir,
 		installer: installer,
 		manifest:  manifest,
@@ -36,7 +36,7 @@ func New(depDir string, buildDir string, installer Installer, manifest Manifest,
 	}
 }
 
-func (d *DotnetRuntime) Install(mainProjectFile string) error {
+func (d *DotnetAspNetCore) Install(mainProjectFile string) error {
 	versions, err := d.requiredVersions(mainProjectFile)
 	if err != nil {
 		return err
@@ -44,13 +44,13 @@ func (d *DotnetRuntime) Install(mainProjectFile string) error {
 	if len(versions) == 0 {
 		return nil
 	}
-	d.logger.Info("Required dotnetruntime versions: %v", versions)
+	d.logger.Info("Required  versions: %v", versions)
 
 	for _, v := range versions {
 		if found, err := d.isInstalled(v); err != nil {
 			return err
 		} else if !found {
-			if err := d.installRuntime(v); err != nil {
+			if err := d.installAspNetCore(v); err != nil {
 				return err
 			}
 		}
@@ -58,7 +58,7 @@ func (d *DotnetRuntime) Install(mainProjectFile string) error {
 	return nil
 }
 
-func (d *DotnetRuntime) requiredVersions(mainProjectFile string) ([]string, error) {
+func (d *DotnetAspNetCore) requiredVersions(mainProjectFile string) ([]string, error) {
 	if runtimeFile, err := d.runtimeConfigFile(); err != nil {
 		return nil, err
 	} else {
@@ -77,32 +77,29 @@ func (d *DotnetRuntime) requiredVersions(mainProjectFile string) ([]string, erro
 		return []string{version}, nil
 	}
 
-	if versions, err := d.versionsFromNugetPackages(); err != nil {
-		return nil, err
+	if versions, err := d.versionsFromNugetPackages("microsoft.aspnetcore.app"); err != nil || len(versions) == 0 {
+		return d.versionsFromNugetPackages("microsoft.aspnetcore.all")
 	} else {
 		return versions, nil
 	}
 }
 
-func (d *DotnetRuntime) versionFromProj(mainProjectFile string) (string, error) {
+func (d *DotnetAspNetCore) versionFromProj(mainProjectFile string) (string, error) {
 	proj, err := ioutil.ReadFile(mainProjectFile)
 	if err != nil {
 		return "", err
 	}
 
-	r := regexp.MustCompile("<RuntimeFrameworkVersion>(.*)</RuntimeFrameworkVersion>")
+	r := regexp.MustCompile(`<PackageReference\s+Include="Microsoft.AspNetCore.(App|All)"\s+Version="(.*)"\s*/>`)
 	matches := r.FindStringSubmatch(string(proj))
 	version := ""
-	if len(matches) > 1 {
-		version = matches[1]
-		if version[len(version)-1] == '*' {
-			return d.getLatestPatch(version)
-		}
+	if len(matches) > 2 {
+		version = matches[2]
 	}
 	return version, nil
 }
 
-func (d *DotnetRuntime) versionsFromRuntimeConfig(runtimeConfig string) ([]string, error) {
+func (d *DotnetAspNetCore) versionsFromRuntimeConfig(runtimeConfig string) ([]string, error) {
 	obj := struct {
 		RuntimeOptions struct {
 			Runtime struct {
@@ -120,7 +117,7 @@ func (d *DotnetRuntime) versionsFromRuntimeConfig(runtimeConfig string) ([]strin
 	version := obj.RuntimeOptions.Runtime.Version
 	name := obj.RuntimeOptions.Runtime.Name
 	var err error
-	if version != "" && name == "Microsoft.NETCore.App" {
+	if version != "" && (name == "Microsoft.AspNetCore.App" || name == "Microsoft.AspNetCore.All") {
 		if obj.RuntimeOptions.ApplyPatches == nil || *obj.RuntimeOptions.ApplyPatches {
 			version, err = d.getLatestPatch(version)
 			if err != nil {
@@ -132,8 +129,8 @@ func (d *DotnetRuntime) versionsFromRuntimeConfig(runtimeConfig string) ([]strin
 	return []string{}, nil
 }
 
-func (d *DotnetRuntime) versionsFromNugetPackages() ([]string, error) {
-	restoredVersionsDir := filepath.Join(d.depDir, ".nuget", "packages", "microsoft.netcore.app")
+func (d *DotnetAspNetCore) versionsFromNugetPackages(metapackageName string) ([]string, error) {
+	restoredVersionsDir := filepath.Join(d.depDir, ".nuget", "packages", metapackageName)
 	if exists, err := libbuildpack.FileExists(restoredVersionsDir); err != nil {
 		return []string{}, err
 	} else if !exists {
@@ -161,10 +158,10 @@ func (d *DotnetRuntime) versionsFromNugetPackages() ([]string, error) {
 	return distinctVersions, nil
 }
 
-func (d *DotnetRuntime) getLatestPatch(version string) (string, error) {
+func (d *DotnetAspNetCore) getLatestPatch(version string) (string, error) {
 	v := strings.Split(version, ".")
 	v[2] = "x"
-	versions := d.manifest.AllDependencyVersions("dotnet-runtime")
+	versions := d.manifest.AllDependencyVersions("dotnet-aspnetcore")
 	latestPatch, err := libbuildpack.FindMatchingVersion(strings.Join(v, "."), versions)
 	if err != nil {
 		return "", err
@@ -172,29 +169,33 @@ func (d *DotnetRuntime) getLatestPatch(version string) (string, error) {
 	return latestPatch, nil
 }
 
-func (d *DotnetRuntime) getRuntimeDir() string {
-	return filepath.Join(d.depDir, "dotnet-sdk", "shared", "Microsoft.NETCore.App")
+// func (d *DotnetAspNetCore) getAspNetCoreAllDir() string {
+// 	return filepath.Join(d.depDir, "dotnet-sdk", "shared", "Microsoft.AspNetCore.All")
+// }
+
+func (d *DotnetAspNetCore) getAspNetCoreAppDir() string {
+	return filepath.Join(d.depDir, "dotnet-sdk", "shared", "Microsoft.AspNetCore.App")
 }
 
-func (d *DotnetRuntime) isInstalled(version string) (bool, error) {
-	runtimePath := filepath.Join(d.getRuntimeDir(), version)
-	if exists, err := libbuildpack.FileExists(runtimePath); err != nil {
+func (d *DotnetAspNetCore) isInstalled(version string) (bool, error) {
+	aspNetCoreAppPath := filepath.Join(d.getAspNetCoreAppDir(), version)
+	if exists, err := libbuildpack.FileExists(aspNetCoreAppPath); err != nil {
 		return false, err
 	} else if exists {
-		d.logger.Info("Using dotnet runtime installed in %s", runtimePath)
+		d.logger.Info("Using dotnet aspnetcore installed in %s", aspNetCoreAppPath)
 		return true, nil
 	}
 	return false, nil
 }
 
-func (d *DotnetRuntime) installRuntime(version string) error {
-	if err := d.installer.InstallDependency(libbuildpack.Dependency{Name: "dotnet-runtime", Version: version}, filepath.Join(d.depDir, "dotnet-sdk")); err != nil {
+func (d *DotnetAspNetCore) installAspNetCore(version string) error {
+	if err := d.installer.InstallDependency(libbuildpack.Dependency{Name: "dotnet-aspnetcore", Version: version}, filepath.Join(d.depDir, "dotnet-sdk")); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (d *DotnetRuntime) runtimeConfigFile() (string, error) {
+func (d *DotnetAspNetCore) runtimeConfigFile() (string, error) {
 	if configFiles, err := filepath.Glob(filepath.Join(d.buildDir, "*.runtimeconfig.json")); err != nil {
 		return "", err
 	} else if len(configFiles) == 1 {
