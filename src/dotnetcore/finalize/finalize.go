@@ -21,6 +21,11 @@ var cfStackToOS = map[string]string{
 	"cflinuxfs3m": "ubuntu.18.04-x64",
 }
 
+type Installer interface {
+	FetchDependency(libbuildpack.Dependency, string) error
+	InstallDependency(libbuildpack.Dependency, string) error
+	InstallOnlyVersion(string, string) error
+}
 type Stager interface {
 	BuildDir() string
 	DepsIdx() string
@@ -48,6 +53,7 @@ type Finalizer struct {
 	DotnetAspNetCore DotnetAspNetCore
 	Config           *config.Config
 	Project          *project.Project
+	Installer        Installer
 }
 
 func Run(f *Finalizer) error {
@@ -58,17 +64,23 @@ func Run(f *Finalizer) error {
 		return err
 	}
 
-	mainPath, err := f.Project.MainPath()
-	if err != nil {
-		return err
-	}
-	if err := f.DotnetRuntime.Install(mainPath); err != nil {
-		f.Log.Error("Unable to install required dotnet runtimes: %s", err.Error())
-		return err
-	}
+	// mainPath, err := f.Project.MainPath()
+	// if err != nil {
+	// 	return err
+	// }
 
-	if err := f.DotnetAspNetCore.Install(mainPath); err != nil {
-		f.Log.Error("Unable to install required dotnet aspnetcore: %s", err.Error())
+	// if err := f.DotnetRuntime.Install(mainPath); err != nil {
+	// 	f.Log.Error("Unable to install required dotnet runtime: %s", err.Error())
+	// 	return err
+	// }
+	//
+	// if err := f.DotnetAspNetCore.Install(mainPath); err != nil {
+	// 	f.Log.Error("Unable to install required dotnet aspnetcore: %s", err.Error())
+	// 	return err
+	// }
+	//
+	if err := f.InstallFrameworks(); err != nil {
+		f.Log.Error("Unable to install frameworks: %s", err.Error())
 		return err
 	}
 
@@ -94,6 +106,111 @@ func Run(f *Finalizer) error {
 	}
 	releasePath := filepath.Join(f.Stager.BuildDir(), "tmp", "dotnet-core-buildpack-release-step.yml")
 	return libbuildpack.NewYAML().Write(releasePath, data)
+}
+
+func (f *Finalizer) InstallFrameworks() error {
+	// Source Deployment
+	//    cs proj
+	// Self contained
+	//    nuget (?)
+	// ParseRuntimeConfig
+	// act based on name of framework:
+
+	deploymentType, err := f.Project.DeploymentType()
+	if err != nil {
+		return err
+	}
+
+	var aspnetcoreVersion, runtimeVersion string
+	if deploymentType == "FDD" {
+		aspnetcoreVersion, runtimeVersion, err = f.FDDFrameworkVersions()
+		if err != nil {
+			return err
+		}
+	} else if deploymentType == "SOURCE" {
+		aspnetcoreVersion, runtimeVersion, err = f.SourceFrameworkVersions()
+		if err != nil {
+			return err
+		}
+
+	}
+
+	// else if isSCD {
+	// 	return f.SCDInstallFrameworks()
+	// } else {
+	// 	return f.SourceInstallFrameworks()
+	// }
+	if err := f.Installer.InstallDependency(libbuildpack.Dependency{Name: "dotnet-aspnetcore", Version: aspnetcoreVersion}, filepath.Join(f.Stager.DepDir(), "dotnet-sdk")); err != nil {
+		return err
+	}
+	if err := f.Installer.InstallDependency(libbuildpack.Dependency{Name: "dotnet-runtime", Version: runtimeVersion}, filepath.Join(f.Stager.DepDir(), "dotnet-sdk")); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (f *Finalizer) SourceFrameworkVersions() (string, string, error) {
+	mainPath, err := f.Project.MainPath()
+	if err != nil {
+		return "", "", err
+	}
+	runtimeRegex := "<RuntimeFrameworkVersion>(*)</RuntimeFrameworkVersion>"
+	aspnetcoreRegex := `"Microsoft.AspNetCore.All" Version="(.*)"`
+	runtimeVersion, err := f.Project.VersionFromProjFile(mainPath, runtimeRegex, "dotnet-runtime")
+	if err != nil {
+		return "", "", err
+	}
+	aspnetcoreVersion, err := f.Project.VersionFromProjFile(mainPath, aspnetcoreRegex, "dotnet-aspnetcore")
+	if err != nil {
+		return "", "", err
+	}
+
+	return runtimeVersion, aspnetcoreVersion, nil
+}
+func (f *Finalizer) FDDFrameworkVersions() (string, string, error) {
+	applicationRuntimeConfig, err := f.Project.RuntimeConfigFile()
+	if err != nil {
+		return "", "", err
+	}
+	configJSON, err := f.Project.ParseRuntimeConfig(applicationRuntimeConfig)
+	if err != nil {
+		return "", "", err
+	}
+
+	var aspnetcoreVersion, runtimeVersion string
+
+	frameworkName := configJSON.RuntimeOptions.Framework.Name
+	frameworkVersion := configJSON.RuntimeOptions.Framework.Version
+	applyPatches := configJSON.RuntimeOptions.ApplyPatches
+
+	if frameworkName == "Microsoft.AspNetCore.All" || frameworkName == "Microsoft.AspNetCore.App" {
+		aspnetcoreVersion, err := f.Project.FindMatchingFrameworkVersion("dotnet-aspnetcore", frameworkVersion, applyPatches)
+		if err != nil {
+			return "", "", err
+		}
+		aspnetConfigJSON, err := f.Project.ParseRuntimeConfig(filepath.Join(f.Stager.DepDir(), "dotnet-sdk", "shared", "Microsoft.AspNetCore.App", aspnetcoreVersion, "Microsoft.AspNetCore.App.runtimeconfig.json"))
+		if err != nil {
+			return "", "", err
+		}
+		runtimeVersion, err = f.Project.FindMatchingFrameworkVersion("dotnet-runtime", aspnetConfigJSON.RuntimeOptions.Framework.Version, applyPatches)
+		if err != nil {
+			return "", "", err
+		}
+
+	} else if frameworkName == "Microsoft.NETCore.App" {
+		runtimeVersion, err = f.Project.FindMatchingFrameworkVersion("dotnet-runtime", frameworkVersion, applyPatches)
+		if err != nil {
+			return "", "", err
+		}
+		aspnetcoreVersion, err = f.Project.GetVersionFromDepsJSON()
+		if err != nil {
+			return "", "", err
+		}
+	} else {
+		return "", "", fmt.Errorf("invalid framework specified in application runtime config file")
+	}
+	return aspnetcoreVersion, runtimeVersion, nil
+
 }
 
 func (f *Finalizer) CleanStagingArea() error {

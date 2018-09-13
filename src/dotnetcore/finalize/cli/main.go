@@ -12,6 +12,7 @@ import (
 	// _ "dotnetcore/hooks"
 	"time"
 
+	"dotnetcore/dotnetaspnetcore"
 	"github.com/cloudfoundry/libbuildpack"
 )
 
@@ -59,14 +60,17 @@ func main() {
 		os.Exit(15)
 	}
 
-	dotnetruntime := dotnetruntime.New(stager.DepDir(), stager.BuildDir(), libbuildpack.NewInstaller(manifest), manifest, logger)
+	installer := libbuildpack.NewInstaller(manifest)
+	dotnetruntime := dotnetruntime.New(stager.DepDir(), stager.BuildDir(), installer, manifest, logger)
+	dotnetaspnetcore := dotnetaspnetcore.New(stager.DepDir(), stager.BuildDir(), installer, manifest, logger)
 	f := finalize.Finalizer{
-		Stager:        stager,
-		Log:           logger,
-		Command:       &libbuildpack.Command{},
-		DotnetRuntime: dotnetruntime,
-		Config:        &configYml.Config,
-		Project:       project.New(stager.BuildDir(), stager.DepDir(), stager.DepsIdx()),
+		Stager:           stager,
+		Log:              logger,
+		Command:          &libbuildpack.Command{},
+		DotnetRuntime:    dotnetruntime,
+		DotnetAspNetCore: dotnetaspnetcore,
+		Config:           &configYml.Config,
+		Project:          project.New(stager.BuildDir(), stager.DepDir(), stager.DepsIdx()),
 	}
 
 	if err := finalize.Run(&f); err != nil {

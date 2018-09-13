@@ -44,7 +44,7 @@ func (d *DotnetAspNetCore) Install(mainProjectFile string) error {
 	if len(versions) == 0 {
 		return nil
 	}
-	d.logger.Info("Required  versions: %v", versions)
+	d.logger.Info("Required aspnetcore versions: %v", versions)
 
 	for _, v := range versions {
 		if found, err := d.isInstalled(v); err != nil {
@@ -59,6 +59,7 @@ func (d *DotnetAspNetCore) Install(mainProjectFile string) error {
 }
 
 func (d *DotnetAspNetCore) requiredVersions(mainProjectFile string) ([]string, error) {
+	fmt.Println("Looking for versions in runtime config")
 	if runtimeFile, err := d.runtimeConfigFile(); err != nil {
 		return nil, err
 	} else {
@@ -66,17 +67,18 @@ func (d *DotnetAspNetCore) requiredVersions(mainProjectFile string) ([]string, e
 			if versions, err := d.versionsFromRuntimeConfig(runtimeFile); err != nil {
 				return nil, err
 			} else {
+				fmt.Printf("**** versions = %s\n", versions)
 				return versions, nil
 			}
 		}
 	}
-
+	fmt.Println("Looking for versions in project file")
 	if version, err := d.versionFromProj(mainProjectFile); err != nil {
 		return nil, err
 	} else if version != "" {
 		return []string{version}, nil
 	}
-
+	fmt.Println("Looking for versions in nuget packages")
 	if versions, err := d.versionsFromNugetPackages("microsoft.aspnetcore.app"); err != nil || len(versions) == 0 {
 		return d.versionsFromNugetPackages("microsoft.aspnetcore.all")
 	} else {
@@ -168,10 +170,6 @@ func (d *DotnetAspNetCore) getLatestPatch(version string) (string, error) {
 	}
 	return latestPatch, nil
 }
-
-// func (d *DotnetAspNetCore) getAspNetCoreAllDir() string {
-// 	return filepath.Join(d.depDir, "dotnet-sdk", "shared", "Microsoft.AspNetCore.All")
-// }
 
 func (d *DotnetAspNetCore) getAspNetCoreAppDir() string {
 	return filepath.Join(d.depDir, "dotnet-sdk", "shared", "Microsoft.AspNetCore.App")

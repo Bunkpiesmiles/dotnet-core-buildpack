@@ -112,7 +112,7 @@ var _ = Describe("Dotnetruntime", func() {
 					})
 
 					It("installs the additional runtime", func() {
-						mockManifest.EXPECT().AllDependencyVersions("dotnet-runtime").Return([]string{"4.5.6","6.7.8","6.7.9","6.8.9"})
+						mockManifest.EXPECT().AllDependencyVersions("dotnet-runtime").Return([]string{"4.5.6", "6.7.8", "6.7.9", "6.8.9"})
 						mockInstaller.EXPECT().InstallDependency(libbuildpack.Dependency{Name: "dotnet-runtime", Version: "6.7.9"}, filepath.Join(depDir, "dotnet-sdk"))
 						Expect(subject.Install(filepath.Join(buildDir, "foo.csproj"))).To(Succeed())
 					})

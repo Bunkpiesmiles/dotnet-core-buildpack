@@ -454,6 +454,7 @@ var _ = Describe("Supply", func() {
 				})
 			})
 		})
+
 		Context("fsproj", func() {
 			BeforeEach(func() {
 				Expect(os.Mkdir(filepath.Join(buildDir, "inner"), 0755)).To(Succeed())

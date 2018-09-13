@@ -151,9 +151,9 @@ var _ = Describe("CF Dotnet Buildpack", func() {
 				app.Memory = "2G"
 			})
 
-			It("publishes and runs, using exact runtime", func() {
+			FIt("publishes and runs, using exact runtime", func() {
 				PushAppAndConfirm(app)
-				Eventually(app.Stdout.String()).Should(ContainSubstring("Required dotnetruntime versions: [2.1.3]"))
+				Eventually(app.Stdout.String()).Should(ContainSubstring("Required aspnetcore versions: [2.1.3]"))
 				Expect(app.GetBody("/")).To(ContainSubstring("Sample pages using ASP.NET Core MVC"))
 			})
 		})
@@ -165,9 +165,9 @@ var _ = Describe("CF Dotnet Buildpack", func() {
 				app.Memory = "2G"
 			})
 
-			It("publishes and runs, using latest patch runtime", func() {
+			FIt("publishes and runs, using latest patch runtime", func() {
 				PushAppAndConfirm(app)
-				Eventually(app.Stdout.String()).Should(ContainSubstring("Required dotnetruntime versions: [2.1.3]"))
+				Eventually(app.Stdout.String()).Should(ContainSubstring("Required aspnetcore versions: [2.1.3]"))
 				Expect(app.GetBody("/")).To(ContainSubstring("Sample pages using ASP.NET Core MVC"))
 			})
 		})
@@ -179,9 +179,9 @@ var _ = Describe("CF Dotnet Buildpack", func() {
 				app.Memory = "2G"
 			})
 
-			It("publishes and runs, using latest patch runtime", func() {
+			FIt("publishes and runs, using latest patch runtime", func() {
 				PushAppAndConfirm(app)
-				Eventually(app.Stdout.String()).Should(MatchRegexp(`Required dotnetruntime versions: \[(2\.0\.9|2\.1\.3) (2\.0\.9|2\.1\.3)\]`))
+				Eventually(app.Stdout.String()).Should(MatchRegexp(`Required aspnetcore versions: \[(2\.0\.9|2\.1\.3) (2\.0\.9|2\.1\.3)\]`))
 				Expect(app.GetBody("/")).To(ContainSubstring("Sample pages using ASP.NET Core MVC"))
 			})
 		})
@@ -192,10 +192,10 @@ var _ = Describe("CF Dotnet Buildpack", func() {
 			app = cutlass.New(filepath.Join(bpDir, "fixtures", "float_runtimeconfig"))
 		})
 
-		It("installs the latest patch of dotnet runtime from the runtimeconfig.json", func() {
+		FIt("installs the latest patch of dotnet runtime from the runtimeconfig.json", func() {
 			latestPatch := GetLatestPatchVersion("dotnet-runtime", "2.1.x", bpDir)
 			PushAppAndConfirm(app)
-			Expect(app.Stdout.String()).To(ContainSubstring(fmt.Sprintf("Required dotnetruntime versions: [%s]", latestPatch)))
+			Expect(app.Stdout.String()).To(ContainSubstring(fmt.Sprintf("Required aspnetcore versions: [%s]", latestPatch)))
 		})
 	})
 
@@ -207,7 +207,7 @@ var _ = Describe("CF Dotnet Buildpack", func() {
 		It("installs the exact version of dotnet runtime from the runtimeconfig.json", func() {
 			PushAppAndConfirm(app)
 			Eventually(app.Stdout.String()).Should(MatchRegexp(
-				"(Using dotnet runtime installed in .*\\Q/dotnet-sdk/shared/Microsoft.NETCore.App/2.1.3\\E|\\QInstalling dotnet-runtime 2.1.3\\E)"))
+				"(Using dotnet aspnetcore installed in .*\\Q/dotnet-sdk/shared/Microsoft.AspNetCore.App/2.1.3\\E|\\QInstalling dotnet-aspnetcore 2.1.3\\E)"))
 		})
 	})
 
